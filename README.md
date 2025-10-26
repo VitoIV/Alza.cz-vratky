@@ -1,143 +1,119 @@
-# Mini PHP MVC Framework
+# Return Intelligence Suite (PHP Edition)
 
-![PHP 8.3](https://img.shields.io/badge/PHP-8.3-blue.svg?logo=php)
+Tento projekt dodává kompletní proof-of-concept řešení pro kategorizaci vratek podle souboru `odstoupeni.xlsx` bez potřeby Pythonu, Redis fronty ani kontejnerových workerů. Celý workflow běží čistě na PHP, takže je vhodný i pro klasický webhosting.
 
-A very small and lightweight PHP Model-View-Controller (MVC) framework designed for simplicity and ease of use. It features basic routing, user authentication, an ORM-like model interaction with database query building, and HTTP request utilities. Ideal for small projects or learning purposes.
+## 1. Architektura
 
-## Installation
+| Vrstva | Technologie | Popis |
+| --- | --- | --- |
+| Web UI | PHP 8 (bez frameworku), HTML, CSS, JS | Tmavý administrační panel s dashboardem, správou batchů, taxonomie, slovníku a návrhů. |
+| Databáze | PostgreSQL | Perzistence týmů, kategorií, root cause tagů, záznamů batchů a agregovaných issues. |
+| GPT | OpenAI gpt-5.0-mini | Jemná klasifikace pouze tam, kde nestačí slovníček nebo deduplikace. |
 
-### Prerequisites
+Klíčové vlastnosti:
 
-*   PHP 8.3 or higher.
-*   Web server software (Apache or Nginx).
-*   MySQL or MariaDB database.
+- **Taxonomie**: 4 týmy (`CONTENT`, `QUALITY`, `LOGISTICS`, `CUSTOMER`) s detailními kategoriemi a root cause tagy.
+- **Slovníček**: Multi-jazyčný seznam frází, které se zpracují lokálně (90% shoda bez ohledu na pořadí slov).
+- **Batch workflow**: XLSX → databáze → manuálně spuštěné zpracování → GPT klasifikace → agregace duplicit (mimo CONTENT).
+- **Návrhy**: GPT může navrhnout nové kategorie/root cause; návrhy se objeví v sekci „Zpracovat ručně“.
+- **Observabilita**: Progress bar, hlášky o backoffu, log per batch (tlačítko „Log“).
 
-### Setup Steps
+## 2. Konfigurace
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Natsu13/mini.git
-    ```
+V adresáři `config/` je připraveno `app.dist.php`. Zkopírujte jej na `app.php` a upravte hodnoty:
 
-2.  **Database Configuration:**
-    *   Create a database in your MySQL/MariaDB server (e.g., `mini`).
-    *   Update the database connection details in `index.php`. Specifically, modify the following line to match your database server, name, username, and password:
-        ```php
-         $database->connect("127.0.0.1", "mini", "your_db_user", "your_db_password"); // Params: host, db_name, user, password. Use strong credentials for production.
-        ```
-    *   The framework can help generate table schemas from your model definitions. For example, to get the SQL for a `User` model (as seen in `index.php` for initial setup), you can use:
-        ```php
-        echo \Model::generateCreateTableQuery(User::class);
-        ```
-
-3.  **Web Server Configuration:**
-    *   Set the document root of your web server to the project's root directory (where `index.php` and `.htaccess` are located).
-
-    *   **Apache:**
-        *   Ensure `mod_rewrite` is enabled.
-        *   The provided `.htaccess` file should be processed by Apache to handle routing. Make sure your Apache configuration allows `.htaccess` overrides (e.g., `AllowOverride All` in your virtual host configuration).
-
-    *   **Nginx:**
-        *   Use a configuration similar to the following:
-            ```nginx
-            server {
-                listen 80;
-                server_name yourdomain.com; # Replace with your domain
-                root /path/to/your/project; # Replace with the actual path to the project root
-                index index.php;
-
-                location / {
-                    try_files $uri $uri/ /index.php?$query_string;
-                }
-
-                location ~ \.php$ {
-                    include snippets/fastcgi-php.conf;
-                    # Adjust to your PHP-FPM version and socket path if necessary
-                    fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
-                    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-                    include fastcgi_params;
-                }
-
-                # Deny access to .htaccess files, if present
-                location ~ /\.ht {
-                    deny all;
-                }
-            }
-            ```
-            Remember to replace placeholders like `yourdomain.com` and `/path/to/your/project` with your actual values. Reload or restart Nginx to apply the changes.
-
-## Key Features
-
-This framework offers several core functionalities to help you build web applications quickly.
-
-### Routing
-The framework provides a straightforward way to define routes:
 ```php
-$router->add("login", "page=login");
-$router->add("logout", function($args) use($userService, $router) {
-    $userService->logout();
-    $router->redirect("/");
-});
+<?php
+return [
+    'database' => [
+        'driver' => 'pgsql',
+        'host' => '127.0.0.1',
+        'port' => 5432,
+        'database' => 'returns',
+        'username' => 'postgres',
+        'password' => 'secret',
+    ],
+    'openai' => [
+        'api_key' => 'sk-...',
+        'base_url' => 'https://api.openai.com/v1',
+        'model' => 'gpt-5.0-mini',
+        'request_timeout' => 30,
+    ],
+    'processing' => [
+        'chunk_size' => 3,
+        'rate_limit_backoff' => [60, 180, 300],
+    ],
+    'app' => [
+        'timezone' => 'Europe/Prague',
+    ],
+];
 ```
 
-### User Management
-User registration, login, and session management are built-in:
-```php
-$userService->register("test", "password", "test@test.cz");
-$userService->login("test", "password");
-$userService->isAuthentificated();
-$user = $userService->current();
+Soubor `config/app.php` se necommitne do repozitáře, takže API klíč zůstane mimo git.
+
+## 3. Inicializace databáze
+
+```sql
+CREATE DATABASE returns;
+\c returns
+\i database/schema.sql
+\i database/seed_taxonomy.sql
+\i database/seed_glossary.sql
 ```
 
-### Database and Models
-Define database models and interact with your database using an ORM-like approach. Table schemas can also be generated from these model definitions.
-```php
-/** 
- * @table("users") 
- */
-class User extends \Model {
-    /** @primaryKey */
-    public ?int $id;
+Schéma zahrnuje všechny tabulky pro batche, slovníček, návrhy a agregované issues.
 
-    /** @column("login") */
-    public string $login;
+## 4. Nasazení na webhosting
 
-    public string $password;
+1. Nahrajte adresář `app/` a `config/`, `database/`, `odstoupeni.xlsx` na server (např. přes SFTP).
+2. Nastavte document root na `app/public`.
+3. Ujistěte se, že PHP má povolený `pdo_pgsql`, `mbstring`, `curl`, `zip` a `json`.
+4. Umožněte zápis do `app/storage/uploads` a `app/storage/logs`.
+5. Nastavte `config/app.php` podle vašeho prostředí.
+6. Přihlaste se do administrace a nahrajte `odstoupeni.xlsx` nebo vlastní export.
 
-    public string $email;
-}
-```
+## 5. Workflow zpracování
 
-Build complex queries easily:
-```php
-$builder = db\User::where("login = 'admin'")
-  ->where("id = :id", [":id" => 1])->limit(10);
-```
+1. **Nahrání souboru** – přes `/batches/upload` vyberete XLSX (používá vlastní reader, není potřeba další knihovna).
+2. **Start zpracování** – na detailu batche klikněte na „Start“. Skript začne postupně zpracovávat záznamy:
+   - Slovníček (90% shoda bez ohledu na pořadí slov) zachytí triviální důvody bez volání GPT.
+   - Duplicitní texty v rámci jednoho batche se přebírají z prvního vyhodnocení.
+   - Zbytek jde do GPT s generovaným promtem dle aktuální taxonomie.
+3. **Rate limit handling** – pokud API vrátí `429`, běží backoff 60 → 180 → 300 vteřin. Po třetím selhání se batch pozastaví a UI zobrazí upozornění.
+4. **Agregace** – po dokončení batche vzniknou issues (CONTENT se neslučuje, ostatní ano). Detail issue obsahuje tabulku s RMA a kódem produktu všech sloučených záznamů.
+5. **Log** – tlačítko „Log“ na detailu batche vypíše poslední zápisy z `storage/logs/batch-{id}.log`.
 
-### HTTP Requests
-Make HTTP requests to external services:
-```php
-$http = new Http();
-$response = $http->getJson(Router::url()."/apitest/")->getResponse();
-```
+Zpracování běží v prohlížeči (AJAX smyčka). Pokud potřebujete automatizaci, lze volat `POST /batches/{id}/process` periodicky například přes cron.
 
-## Project Structure
+## 6. Taxonomie, slovníček a návrhy
 
-The framework follows a standard MVC pattern. Key directories and files include:
+- **Taxonomie** – v sekci „Taxonomy“ upravíte definice týmů, kategorií a root cause tagů. Každá změna se okamžitě promítne do promptu.
+- **Slovníček** – definice frází fungují vícejazyčně. Normalizace třídí slova v frázi abyste se nemuseli starat o pořadí.
+- **Návrhy** – pokud GPT navrhne novou kategorii/root cause, objeví se v „Proposals“. Schválení vytvoří záznam v taxonomii a příště se použije automaticky.
 
-*   `controllers/`: Contains controller classes that handle user requests, process input, interact with models, and select views to render.
-*   `models/`: Contains model classes that represent database tables, encapsulate business logic, and handle data operations.
-*   `views/`: Contains view files (typically PHP templates) responsible for presenting data to the user.
-*   `library.php`: Core library file. This may include helper functions, class autoloading mechanisms, framework bootstrap routines, or other essential utilities.
-*   `index.php`: The main entry point of the application. It initializes the framework (e.g., autoloader, services, database connection), sets up routing, and dispatches requests to the appropriate controllers.
-*   `.htaccess`: Apache web server configuration file. It's primarily used for URL rewriting, ensuring that all relevant requests are directed to `index.php` to be handled by the framework's router.
+## 7. Logika klasifikace
 
-## Contributing
+1. **Prázdný text** → označí se jako neakční a `needs_review=true`.
+2. **Slovníček** → přímo přidělí tým/kategorii/root cause.
+3. **Duplicitní hash** → zkopíruje výsledek z první shody.
+4. **GPT** → model dostane generovaný prompt s definicemi z databáze a vrátí JSON. Výstup se validuje (pokud chybí klíče, záznam se označí `needs_review`).
+5. **Backoff** → při `429` se záznam vrátí do `pending` a batch přejde do čekání.
 
-Contributions are welcome! If you have suggestions or want to improve the framework, please feel free to:
-1.  Open an issue to discuss the change.
-2.  Fork the repository and submit a pull request with your improvements.
+## 8. Nasazovací kroky (shrnutí)
 
-## License
+1. `git clone` nebo upload archivu na hosting.
+2. Zkopírujte `config/app.dist.php` → `config/app.php` a doplňte přístupy.
+3. Spusťte SQL skripty `schema.sql`, `seed_taxonomy.sql`, `seed_glossary.sql`.
+4. Zkontrolujte oprávnění na `app/storage/*`.
+5. Otevřete `https://váš-host/app/public` (nebo dle nastavení) a přidejte první batch.
+6. Sledujte dashboard, zpracujte návrhy, exportujte výsledky do CSV (přes filtry/tabulku).
 
-This project is licensed under the MIT License.
+## 9. Tipy pro produkční nasazení
+
+- Pokud chcete plnou automatizaci, nastavte cron (např. každou minutu) na URL `POST /batches/{id}/process`.
+- Při větších datech můžete zvýšit `processing.chunk_size` (počet záznamů na jeden request).
+- Doporučujeme logovat přístup přes HTTPS a chránit aplikaci pomocí Basic Auth / SSO na úrovni webserveru.
+
+---
+
+Repozitář obsahuje i referenční dataset `odstoupeni.xlsx`, taxonomii a slovníček založený na analýze všech 15 298 záznamů.
