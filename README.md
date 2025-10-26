@@ -70,10 +70,11 @@ Schéma zahrnuje všechny tabulky pro batche, slovníček, návrhy a agregované
 
 1. Nahrajte adresář `app/` a `config/`, `database/`, `odstoupeni.xlsx` na server (např. přes SFTP).
 2. Nastavte document root na `app/public`.
-3. Ujistěte se, že PHP má povolený `pdo_mysql`, `mbstring`, `curl`, `zip` a `json`.
-4. Umožněte zápis do `app/storage/uploads` a `app/storage/logs`.
-5. Nastavte `config/app.php` podle vašeho prostředí.
-6. Přihlaste se do administrace a nahrajte `odstoupeni.xlsx` nebo vlastní export.
+3. Nakonfigurujte Nginx tak, aby všechny požadavky směřoval na `index.php` (viz níže).
+4. Ujistěte se, že PHP má povolený `pdo_mysql`, `mbstring`, `curl`, `zip` a `json`.
+5. Umožněte zápis do `app/storage/uploads` a `app/storage/logs`.
+6. Nastavte `config/app.php` podle vašeho prostředí.
+7. Přihlaste se do administrace a nahrajte `odstoupeni.xlsx` nebo vlastní export.
 
 ## 5. Workflow zpracování
 
@@ -116,6 +117,44 @@ Zpracování běží v prohlížeči (AJAX smyčka). Pokud potřebujete automati
 - Pokud chcete plnou automatizaci, nastavte cron (např. každou minutu) na URL `POST /batches/{id}/process`.
 - Při větších datech můžete zvýšit `processing.chunk_size` (počet záznamů na jeden request).
 - Doporučujeme logovat přístup přes HTTPS a chránit aplikaci pomocí Basic Auth / SSO na úrovni webserveru.
+
+### Ukázková konfigurace pro Nginx
+
+V adresáři `config/` najdete soubor `nginx.example.conf` se vzorovým server blockem. Pro běžný webhosting s Nginx nastavte server block například takto (přizpůsobte doménu, cestu a socket PHP-FPM):
+
+```
+server {
+    listen 443 ssl;
+    server_name returns.example.com;
+
+    root /var/www/returns/app/public;
+    index index.php;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location /resources/ {
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_read_timeout 120s;
+    }
+
+    client_max_body_size 32m;
+    sendfile on;
+    tcp_nopush on;
+}
+```
+
+Pokud hosting vyžaduje jiný port nebo používá proxy (např. aaPanel), zachovejte direktivu `try_files`, aby všechny cesty (`/taxonomy`, `/batches/…`) končily ve `index.php`.
 
 ---
 
