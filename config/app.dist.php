@@ -2,12 +2,13 @@
 
 return [
     'database' => [
-        'driver' => 'pgsql',
+        'driver' => 'mysql',
         'host' => '127.0.0.1',
-        'port' => 5432,
+        'port' => 3306,
         'database' => 'returns',
-        'username' => 'postgres',
+        'username' => 'root',
         'password' => '',
+        'charset' => 'utf8mb4',
     ],
     'openai' => [
         'api_key' => 'PASTE_YOUR_KEY_HERE',

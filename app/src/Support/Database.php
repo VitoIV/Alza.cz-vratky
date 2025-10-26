@@ -12,27 +12,29 @@ class Database
     public static function connection(): PDO
     {
         if (self::$pdo === null) {
-            $driver = Config::get('database.driver', 'pgsql');
+            $driver = Config::get('database.driver', 'mysql');
             $host = Config::get('database.host', '127.0.0.1');
-            $port = Config::get('database.port', 5432);
+            $port = Config::get('database.port', 3306);
             $database = Config::get('database.database', 'returns');
-            $username = Config::get('database.username', 'postgres');
+            $username = Config::get('database.username', 'root');
             $password = Config::get('database.password', '');
+            $charset = Config::get('database.charset', 'utf8mb4');
 
-            if ($driver !== 'pgsql') {
-                throw new \RuntimeException('Unsupported database driver: '.$driver);
+            if ($driver !== 'mysql') {
+                throw new \RuntimeException('Unsupported database driver: ' . $driver);
             }
 
-            $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, $database);
+            $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
 
             try {
                 self::$pdo = new PDO($dsn, $username, $password, [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
                 ]);
             } catch (PDOException $e) {
                 http_response_code(500);
-                echo 'Database connection failed: '.htmlspecialchars($e->getMessage());
+                echo 'Database connection failed: ' . htmlspecialchars($e->getMessage());
                 exit;
             }
         }

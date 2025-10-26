@@ -14,13 +14,14 @@ class GlossaryRepository
 
     public function activeEntries(): array
     {
-        $stmt = Database::connection()->query('SELECT * FROM glossary_entries WHERE active = true ORDER BY language, phrase');
+        $stmt = Database::connection()->query('SELECT * FROM glossary_entries WHERE active = 1 ORDER BY language, phrase');
         return $stmt->fetchAll();
     }
 
     public function create(array $data): int
     {
-        $stmt = Database::connection()->prepare('INSERT INTO glossary_entries (phrase, normalized_phrase, language, threshold, team_id, category_id, root_cause_id, actionable_flag, notes, active, created_at, updated_at) VALUES (:phrase, :normalized_phrase, :language, :threshold, :team_id, :category_id, :root_cause_id, :actionable_flag, :notes, :active, NOW(), NOW()) RETURNING id');
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('INSERT INTO glossary_entries (phrase, normalized_phrase, language, threshold, team_id, category_id, root_cause_id, actionable_flag, notes, active, created_at, updated_at) VALUES (:phrase, :normalized_phrase, :language, :threshold, :team_id, :category_id, :root_cause_id, :actionable_flag, :notes, :active, NOW(), NOW())');
         $stmt->execute([
             'phrase' => $data['phrase'],
             'normalized_phrase' => $data['normalized_phrase'],
@@ -29,11 +30,11 @@ class GlossaryRepository
             'team_id' => $data['team_id'],
             'category_id' => $data['category_id'],
             'root_cause_id' => $data['root_cause_id'],
-            'actionable_flag' => $data['actionable_flag'],
+            'actionable_flag' => $data['actionable_flag'] ? 1 : 0,
             'notes' => $data['notes'],
-            'active' => $data['active'] ?? true,
+            'active' => isset($data['active']) ? (int) $data['active'] : 1,
         ]);
-        return (int) $stmt->fetchColumn();
+        return (int) $pdo->lastInsertId();
     }
 
     public function update(int $id, array $data): void
@@ -47,9 +48,9 @@ class GlossaryRepository
             'team_id' => $data['team_id'],
             'category_id' => $data['category_id'],
             'root_cause_id' => $data['root_cause_id'],
-            'actionable_flag' => $data['actionable_flag'],
+            'actionable_flag' => $data['actionable_flag'] ? 1 : 0,
             'notes' => $data['notes'],
-            'active' => $data['active'] ?? true,
+            'active' => isset($data['active']) ? (int) $data['active'] : 1,
             'id' => $id,
         ]);
     }

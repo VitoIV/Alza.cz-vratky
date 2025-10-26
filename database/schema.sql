@@ -1,149 +1,152 @@
--- PostgreSQL schema for Return Intelligence Suite
+-- MySQL schema for Return Intelligence Suite
+
 CREATE TABLE IF NOT EXISTS teams (
-    id SERIAL PRIMARY KEY,
-    key TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `key` VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     prompt_definition TEXT,
     position INT DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS categories (
-    id SERIAL PRIMARY KEY,
-    team_id INT REFERENCES teams(id) ON DELETE CASCADE,
-    key TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    team_id INT UNSIGNED,
+    `key` VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     prompt_definition TEXT,
     position INT DEFAULT 0,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_categories_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS root_causes (
-    id SERIAL PRIMARY KEY,
-    team_id INT REFERENCES teams(id) ON DELETE CASCADE,
-    category_id INT REFERENCES categories(id) ON DELETE CASCADE,
-    key TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    team_id INT UNSIGNED,
+    category_id INT UNSIGNED,
+    `key` VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     prompt_definition TEXT,
     position INT DEFAULT 0,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_root_causes_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    CONSTRAINT fk_root_causes_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS glossary_entries (
-    id SERIAL PRIMARY KEY,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     phrase TEXT NOT NULL,
     normalized_phrase TEXT NOT NULL,
-    language TEXT DEFAULT 'unknown',
-    threshold NUMERIC(4,2) DEFAULT 0.90,
-    team_id INT REFERENCES teams(id),
-    category_id INT REFERENCES categories(id),
-    root_cause_id INT REFERENCES root_causes(id),
-    actionable_flag BOOLEAN DEFAULT TRUE,
+    language VARCHAR(10) DEFAULT 'unknown',
+    threshold DECIMAL(4,2) DEFAULT 0.90,
+    team_id INT UNSIGNED,
+    category_id INT UNSIGNED,
+    root_cause_id INT UNSIGNED,
+    actionable_flag TINYINT(1) DEFAULT 1,
     notes TEXT,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_glossary_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
+    CONSTRAINT fk_glossary_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_glossary_root FOREIGN KEY (root_cause_id) REFERENCES root_causes(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS batches (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    filename TEXT,
-    status TEXT DEFAULT 'queued',
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    filename VARCHAR(255),
+    status VARCHAR(32) DEFAULT 'queued',
     status_message TEXT,
     total_records INT DEFAULT 0,
     processed_records INT DEFAULT 0,
     actionable_records INT DEFAULT 0,
     backoff_step INT DEFAULT 0,
-    backoff_until TIMESTAMP WITH TIME ZONE,
+    backoff_until DATETIME NULL,
     total_prompt_tokens BIGINT DEFAULT 0,
     total_completion_tokens BIGINT DEFAULT 0,
-    total_latency_ms DOUBLE PRECISION DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    total_latency_ms DOUBLE DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS batch_records (
-    id SERIAL PRIMARY KEY,
-    batch_id INT REFERENCES batches(id) ON DELETE CASCADE,
-    rma TEXT,
-    product_code TEXT,
-    seo_prefix TEXT,
-    requested_at TEXT,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_id INT UNSIGNED,
+    rma VARCHAR(255),
+    product_code VARCHAR(255),
+    seo_prefix VARCHAR(255),
+    requested_at VARCHAR(255),
     product_name TEXT,
     issue_text TEXT,
-    language TEXT,
-    hash_key TEXT,
-    status TEXT DEFAULT 'pending',
-    actionable_flag BOOLEAN,
-    team_id INT REFERENCES teams(id),
-    category_id INT REFERENCES categories(id),
-    root_cause_id INT REFERENCES root_causes(id),
+    language VARCHAR(16),
+    hash_key VARCHAR(64),
+    status VARCHAR(32) DEFAULT 'pending',
+    actionable_flag TINYINT(1) DEFAULT NULL,
+    team_id INT UNSIGNED,
+    category_id INT UNSIGNED,
+    root_cause_id INT UNSIGNED,
     recommended_action TEXT,
-    classification_source TEXT,
-    classification_json JSONB,
+    classification_source VARCHAR(32),
+    classification_json JSON,
     prompt_tokens INT DEFAULT 0,
     completion_tokens INT DEFAULT 0,
-    latency_ms DOUBLE PRECISION,
-    needs_review BOOLEAN DEFAULT FALSE,
+    latency_ms DOUBLE DEFAULT 0,
+    needs_review TINYINT(1) DEFAULT 0,
     error_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_batch_records_batch FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+    CONSTRAINT fk_batch_records_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
+    CONSTRAINT fk_batch_records_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_batch_records_root FOREIGN KEY (root_cause_id) REFERENCES root_causes(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS proposals (
-    id SERIAL PRIMARY KEY,
-    batch_record_id INT REFERENCES batch_records(id) ON DELETE CASCADE,
-    type TEXT NOT NULL,
-    suggestion_key TEXT,
-    suggestion_name TEXT,
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_record_id INT UNSIGNED,
+    type VARCHAR(32) NOT NULL,
+    suggestion_key VARCHAR(64),
+    suggestion_name VARCHAR(255),
     suggestion_description TEXT,
     suggestion_prompt_definition TEXT,
-    confidence NUMERIC(4,2) DEFAULT 0.50,
-    status TEXT DEFAULT 'pending',
-    resolved_entity_id INT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    confidence DECIMAL(4,2) DEFAULT 0.50,
+    status VARCHAR(32) DEFAULT 'pending',
+    resolved_entity_id INT UNSIGNED,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_proposals_record FOREIGN KEY (batch_record_id) REFERENCES batch_records(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS issues (
-    id SERIAL PRIMARY KEY,
-    batch_id INT REFERENCES batches(id) ON DELETE CASCADE,
-    actionable_flag BOOLEAN DEFAULT FALSE,
-    team_id INT REFERENCES teams(id),
-    category_id INT REFERENCES categories(id),
-    root_cause_id INT REFERENCES root_causes(id),
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_id INT UNSIGNED,
+    actionable_flag TINYINT(1) DEFAULT 0,
+    team_id INT UNSIGNED,
+    category_id INT UNSIGNED,
+    root_cause_id INT UNSIGNED,
     recommended_action TEXT,
     total_records INT DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_issues_batch FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+    CONSTRAINT fk_issues_team FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
+    CONSTRAINT fk_issues_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+    CONSTRAINT fk_issues_root FOREIGN KEY (root_cause_id) REFERENCES root_causes(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS issue_records (
-    issue_id INT REFERENCES issues(id) ON DELETE CASCADE,
-    batch_record_id INT REFERENCES batch_records(id) ON DELETE CASCADE,
-    PRIMARY KEY (issue_id, batch_record_id)
-);
-
-CREATE OR REPLACE FUNCTION touch_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_touch_teams BEFORE UPDATE ON teams FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER trg_touch_categories BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER trg_touch_root_causes BEFORE UPDATE ON root_causes FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER trg_touch_glossary BEFORE UPDATE ON glossary_entries FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER trg_touch_batches BEFORE UPDATE ON batches FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
-CREATE TRIGGER trg_touch_batch_records BEFORE UPDATE ON batch_records FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    issue_id INT UNSIGNED,
+    batch_record_id INT UNSIGNED,
+    PRIMARY KEY (issue_id, batch_record_id),
+    CONSTRAINT fk_issue_records_issue FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    CONSTRAINT fk_issue_records_record FOREIGN KEY (batch_record_id) REFERENCES batch_records(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -38,11 +38,10 @@ class RecordRepository
 
     public function nextPendingRecords(int $batchId, int $limit): array
     {
-        $sql = "SELECT * FROM batch_records WHERE batch_id = :batch AND status = 'pending' ORDER BY id ASC LIMIT :limit";
+        $limit = max(1, (int) $limit);
+        $sql = "SELECT * FROM batch_records WHERE batch_id = :batch AND status = 'pending' ORDER BY id ASC LIMIT {$limit}";
         $stmt = Database::connection()->prepare($sql);
-        $stmt->bindValue('batch', $batchId, \PDO::PARAM_INT);
-        $stmt->bindValue('limit', $limit, \PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt->execute(['batch' => $batchId]);
         return $stmt->fetchAll();
     }
 
@@ -86,7 +85,7 @@ class RecordRepository
 
     public function duplicateCompleted(int $batchId, string $hashKey, ?string $productCode): ?array
     {
-        $stmt = Database::connection()->prepare('SELECT * FROM batch_records WHERE batch_id = :batch AND hash_key = :hash AND status = \'completed\' ORDER BY id ASC LIMIT 1');
+        $stmt = Database::connection()->prepare("SELECT * FROM batch_records WHERE batch_id = :batch AND hash_key = :hash AND status = 'completed' ORDER BY id ASC LIMIT 1");
         $stmt->execute(['batch' => $batchId, 'hash' => $hashKey]);
         $record = $stmt->fetch();
         if (!$record) {

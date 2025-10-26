@@ -58,13 +58,13 @@ class IssueRepository
         $pdo->beginTransaction();
 
         $pdo->prepare('DELETE FROM issues WHERE batch_id = :batch')->execute(['batch' => $batchId]);
-        $pdo->prepare('DELETE FROM issue_records USING batch_records WHERE issue_records.batch_record_id = batch_records.id AND batch_records.batch_id = :batch')->execute(['batch' => $batchId]);
+        $pdo->prepare('DELETE ir FROM issue_records ir JOIN batch_records br ON ir.batch_record_id = br.id WHERE br.batch_id = :batch')->execute(['batch' => $batchId]);
 
         $groupSql = "SELECT id, actionable_flag, team_id, category_id, root_cause_id, recommended_action
                      FROM batch_records
                      WHERE batch_id = :batch
                        AND status = 'completed'
-                       AND needs_review = false";
+                       AND (needs_review IS NULL OR needs_review = 0)";
 
         $groupStmt = $pdo->prepare($groupSql);
         $groupStmt->execute(['batch' => $batchId]);
@@ -88,7 +88,7 @@ class IssueRepository
             $grouped[$key]['template'] = $row;
         }
 
-        $issueInsert = $pdo->prepare('INSERT INTO issues (batch_id, actionable_flag, team_id, category_id, root_cause_id, recommended_action, total_records, created_at, updated_at) VALUES (:batch_id, :actionable_flag, :team_id, :category_id, :root_cause_id, :recommended_action, :total_records, NOW(), NOW()) RETURNING id');
+        $issueInsert = $pdo->prepare('INSERT INTO issues (batch_id, actionable_flag, team_id, category_id, root_cause_id, recommended_action, total_records, created_at, updated_at) VALUES (:batch_id, :actionable_flag, :team_id, :category_id, :root_cause_id, :recommended_action, :total_records, NOW(), NOW())');
         $linkInsert = $pdo->prepare('INSERT INTO issue_records (issue_id, batch_record_id) VALUES (:issue_id, :record_id)');
 
         foreach ($grouped as $payload) {
@@ -104,7 +104,7 @@ class IssueRepository
                 'total_records' => count($payload['records']),
             ]);
 
-            $issueId = (int) $issueInsert->fetchColumn();
+            $issueId = (int) $pdo->lastInsertId();
 
             foreach ($payload['records'] as $recordId) {
                 $linkInsert->execute(['issue_id' => $issueId, 'record_id' => $recordId]);
@@ -116,7 +116,7 @@ class IssueRepository
 
     private function isContentTeam(int $teamId): bool
     {
-        $stmt = Database::connection()->prepare('SELECT key FROM teams WHERE id = :id');
+        $stmt = Database::connection()->prepare('SELECT `key` FROM teams WHERE id = :id');
         $stmt->execute(['id' => $teamId]);
         $key = $stmt->fetchColumn();
 

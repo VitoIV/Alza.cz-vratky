@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Support\Config;
 use App\Support\Database;
 
 class BatchRepository
@@ -22,14 +23,15 @@ class BatchRepository
 
     public function create(array $data): int
     {
-        $stmt = Database::connection()->prepare('INSERT INTO batches (name, filename, status, total_records, processed_records, actionable_records, backoff_step, created_at, updated_at) VALUES (:name, :filename, :status, :total_records, 0, 0, 0, NOW(), NOW()) RETURNING id');
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('INSERT INTO batches (name, filename, status, total_records, processed_records, actionable_records, backoff_step, created_at, updated_at) VALUES (:name, :filename, :status, :total_records, 0, 0, 0, NOW(), NOW())');
         $stmt->execute([
             'name' => $data['name'],
             'filename' => $data['filename'],
             'status' => $data['status'],
             'total_records' => $data['total_records'],
         ]);
-        return (int) $stmt->fetchColumn();
+        return (int) $pdo->lastInsertId();
     }
 
     public function updateStatus(int $id, string $status, ?string $message = null): void
@@ -56,18 +58,22 @@ class BatchRepository
 
     public function setBackoff(int $id, int $step, int $waitSeconds, string $message): void
     {
-        $stmt = Database::connection()->prepare("UPDATE batches SET backoff_step = :step, backoff_until = NOW() + (:wait || ' seconds')::interval, status_message = :message, updated_at = NOW() WHERE id = :id");
+        $timezone = Config::get('app.timezone');
+        $now = $timezone ? new \DateTimeImmutable('now', new \DateTimeZone($timezone)) : new \DateTimeImmutable();
+        $until = $now->modify('+' . $waitSeconds . ' seconds')->format('Y-m-d H:i:s');
+
+        $stmt = Database::connection()->prepare('UPDATE batches SET backoff_step = :step, backoff_until = :until, status_message = :message, updated_at = NOW() WHERE id = :id');
         $stmt->execute([
             'id' => $id,
             'step' => $step,
-            'wait' => $waitSeconds,
+            'until' => $until,
             'message' => $message,
         ]);
     }
 
     public function clearBackoff(int $id): void
     {
-        $stmt = Database::connection()->prepare('UPDATE batches SET backoff_step = 0, backoff_until = NULL, status_message = NULL WHERE id = :id');
+        $stmt = Database::connection()->prepare('UPDATE batches SET backoff_step = 0, backoff_until = NULL, status_message = NULL, updated_at = NOW() WHERE id = :id');
         $stmt->execute(['id' => $id]);
     }
 }

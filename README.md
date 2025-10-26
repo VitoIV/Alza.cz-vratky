@@ -7,7 +7,7 @@ Tento projekt dodává kompletní proof-of-concept řešení pro kategorizaci vr
 | Vrstva | Technologie | Popis |
 | --- | --- | --- |
 | Web UI | PHP 8 (bez frameworku), HTML, CSS, JS | Tmavý administrační panel s dashboardem, správou batchů, taxonomie, slovníku a návrhů. |
-| Databáze | PostgreSQL | Perzistence týmů, kategorií, root cause tagů, záznamů batchů a agregovaných issues. |
+| Databáze | MySQL / MariaDB | Perzistence týmů, kategorií, root cause tagů, záznamů batchů a agregovaných issues. |
 | GPT | OpenAI gpt-5.0-mini | Jemná klasifikace pouze tam, kde nestačí slovníček nebo deduplikace. |
 
 Klíčové vlastnosti:
@@ -26,12 +26,13 @@ V adresáři `config/` je připraveno `app.dist.php`. Zkopírujte jej na `app.ph
 <?php
 return [
     'database' => [
-        'driver' => 'pgsql',
+        'driver' => 'mysql',
         'host' => '127.0.0.1',
-        'port' => 5432,
+        'port' => 3306,
         'database' => 'returns',
-        'username' => 'postgres',
+        'username' => 'root',
         'password' => 'secret',
+        'charset' => 'utf8mb4',
     ],
     'openai' => [
         'api_key' => 'sk-...',
@@ -53,12 +54,14 @@ Soubor `config/app.php` se necommitne do repozitáře, takže API klíč zůstan
 
 ## 3. Inicializace databáze
 
+Přihlaste se do MySQL/MariaDB a spusťte:
+
 ```sql
-CREATE DATABASE returns;
-\c returns
-\i database/schema.sql
-\i database/seed_taxonomy.sql
-\i database/seed_glossary.sql
+CREATE DATABASE returns CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE returns;
+SOURCE database/schema.sql;
+SOURCE database/seed_taxonomy.sql;
+SOURCE database/seed_glossary.sql;
 ```
 
 Schéma zahrnuje všechny tabulky pro batche, slovníček, návrhy a agregované issues.
@@ -67,7 +70,7 @@ Schéma zahrnuje všechny tabulky pro batche, slovníček, návrhy a agregované
 
 1. Nahrajte adresář `app/` a `config/`, `database/`, `odstoupeni.xlsx` na server (např. přes SFTP).
 2. Nastavte document root na `app/public`.
-3. Ujistěte se, že PHP má povolený `pdo_pgsql`, `mbstring`, `curl`, `zip` a `json`.
+3. Ujistěte se, že PHP má povolený `pdo_mysql`, `mbstring`, `curl`, `zip` a `json`.
 4. Umožněte zápis do `app/storage/uploads` a `app/storage/logs`.
 5. Nastavte `config/app.php` podle vašeho prostředí.
 6. Přihlaste se do administrace a nahrajte `odstoupeni.xlsx` nebo vlastní export.
@@ -88,7 +91,7 @@ Zpracování běží v prohlížeči (AJAX smyčka). Pokud potřebujete automati
 ## 6. Taxonomie, slovníček a návrhy
 
 - **Taxonomie** – v sekci „Taxonomy“ upravíte definice týmů, kategorií a root cause tagů. Každá změna se okamžitě promítne do promptu.
-- **Slovníček** – definice frází fungují vícejazyčně. Normalizace třídí slova v frázi abyste se nemuseli starat o pořadí.
+- **Slovníček** – definice frází fungují vícejazyčně. Normalizace třídí slova v frázi, abyste se nemuseli starat o pořadí.
 - **Návrhy** – pokud GPT navrhne novou kategorii/root cause, objeví se v „Proposals“. Schválení vytvoří záznam v taxonomii a příště se použije automaticky.
 
 ## 7. Logika klasifikace
